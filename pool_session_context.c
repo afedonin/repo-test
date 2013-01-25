@@ -48,6 +48,8 @@ void pool_init_session_context(POOL_CONNECTION *frontend, POOL_CONNECTION_POOL *
 		return;
 	}
 
+	session_context->in_transaction = false;
+
 	/* Set connection info */
 	session_context->frontend = frontend;
 	session_context->backend = backend;
@@ -107,6 +109,10 @@ void pool_init_session_context(POOL_CONNECTION *frontend, POOL_CONNECTION_POOL *
 	memset(&session_context->prep_where, 0, sizeof(session_context->prep_where));
 	session_context->prep_where.nelem = POOL_MAX_PREPARED_STATEMENTS;
 #endif /* NOT_USED */
+	
+	memset(&session_context->opened_cursors, 0, sizeof(session_context->opened_cursors));
+	memset(&session_context->cursors_info, 0, sizeof(session_context->cursors_info));
+	
 	/* Reset flag to indicate difference in number of affected tuples
 	 * in UPDATE/DELETE.
 	 */
@@ -128,6 +134,8 @@ void pool_session_context_destroy(void)
 	{
 		pool_clear_sent_message_list();
 		free(session_context->message_list.sent_messages);
+		pool_session_remove_all_cursors();
+		pool_session_remove_all_cursor_info();
 		pool_memory_delete(session_context->memory_context, 0);
 		if (pool_config->memory_cache_enabled)
 		{
@@ -949,4 +957,152 @@ bool can_query_context_destroy(POOL_QUERY_CONTEXT *qc)
 	}
 
 	return true;
+}
+
+void pool_session_add_cursor(const char *name, bool replication_type)
+{
+	if(session_context == NULL) return;
+	pool_debug("Adding cursor: %s", name);
+
+	int i = 0;
+	for(; i < POOL_SESSION_MAX_OPENED_CURSORS; ++i)
+	{
+		if(replication_type && session_context->opened_cursors.replication_cursors[i][0] == '\0')
+		{
+			strncpy(session_context->opened_cursors.replication_cursors[i], name, POOL_SESSION_MAX_CURSOR_NAME);
+			return;
+		}
+		else if(!replication_type && session_context->opened_cursors.distributed_cursors[i][0] == '\0')
+		{
+			strncpy(session_context->opened_cursors.distributed_cursors[i], name, POOL_SESSION_MAX_CURSOR_NAME);
+			return;
+		}
+	}
+}
+
+void pool_session_remove_cursor(const char *name, bool replication_type)
+{
+	if(session_context == NULL) return;
+	pool_debug("Removing cursor: %s", name);
+
+	int i = 0;
+	for(; i < POOL_SESSION_MAX_OPENED_CURSORS; ++i)
+	{
+		if(replication_type && strcmp( session_context->opened_cursors.replication_cursors[i], name ) == 0)
+		{
+			session_context->opened_cursors.replication_cursors[i][0] = '\0';
+			return;
+		}
+		else if(!replication_type && strcmp( session_context->opened_cursors.distributed_cursors[i], name ) == 0)
+		{
+			session_context->opened_cursors.distributed_cursors[i][0] = '\0';
+			return;
+		}
+	}
+}
+
+void pool_session_remove_all_cursors()
+{
+	if(session_context == NULL) return;
+	pool_debug("Removing all cursors");
+
+	memset(&session_context->opened_cursors, 0, sizeof(session_context->opened_cursors));
+}
+
+int  pool_session_find_cursor(const char *name)
+{
+	if(session_context == NULL) return 0;
+
+	int i = 0;
+	for(; i < POOL_SESSION_MAX_OPENED_CURSORS; ++i)
+	{
+		if(strcmp( session_context->opened_cursors.replication_cursors[i], name ) == 0)
+		{
+			return 1;
+		}
+		else if(strcmp( session_context->opened_cursors.distributed_cursors[i], name ) == 0)
+		{
+			return -1;
+		}
+	}
+
+	return 0;
+}
+
+void pool_session_add_cursor_info(const char *name, const char *footer, bool replication_type)
+{
+	if(session_context == NULL) return;
+	pool_debug("pool_session_add_cursor_info(): name: %s, footer: %s, table_type: %d", name, footer, replication_type);
+
+	int i = 0;
+	for(; i < POOL_SESSION_MAX_OPENED_CURSORS; ++i)
+	{
+		if(session_context->cursors_info[i].cursor_name == NULL)
+		{
+			session_context->cursors_info[i].cursor_name = pool_memory_strdup(session_context->memory_context, name);
+			session_context->cursors_info[i].footer_info = pool_memory_strdup(session_context->memory_context, footer);
+			session_context->cursors_info[i].table_type = replication_type;
+			break;
+		}
+	}
+}
+
+void pool_session_remove_cursor_info(const char *name)
+{
+	if(session_context == NULL) return;
+	pool_debug("pool_session_remove_cursor_info(): name: %s", name);
+
+	int i = 0;
+	for(; i < POOL_SESSION_MAX_OPENED_CURSORS; ++i)
+	{
+		if(session_context->cursors_info[i].cursor_name != NULL)
+		{
+			if(strcmp(session_context->cursors_info[i].cursor_name, name) == 0)
+			{
+				pfree(session_context->cursors_info[i].cursor_name);
+				session_context->cursors_info[i].cursor_name = NULL;
+				pfree(session_context->cursors_info[i].footer_info);
+				session_context->cursors_info[i].footer_info = NULL;
+				session_context->cursors_info[i].table_type = 0;
+			}
+		}
+	}
+}
+
+void pool_session_remove_all_cursor_info()
+{
+	if(session_context == NULL) return;
+	pool_debug("pool_session_remove_all_cursor_info()");
+
+	int i = 0;
+	for(; i < POOL_SESSION_MAX_OPENED_CURSORS; ++i)
+	{
+		if(session_context->cursors_info[i].cursor_name != NULL)
+		{
+			pfree(session_context->cursors_info[i].cursor_name);
+			session_context->cursors_info[i].cursor_name = NULL;
+			pfree(session_context->cursors_info[i].footer_info);
+			session_context->cursors_info[i].footer_info = NULL;
+			session_context->cursors_info[i].table_type = 0;
+		}
+	}
+}
+
+CursorsInfo* pool_session_get_cursor_info(const char *name)
+{
+	if(session_context == NULL) return NULL;
+
+	int i = 0;
+	for(; i < POOL_SESSION_MAX_OPENED_CURSORS; ++i)
+	{
+		if(session_context->cursors_info[i].cursor_name != NULL)
+		{
+			if(strcmp(session_context->cursors_info[i].cursor_name, name) == 0)
+			{
+				return &(session_context->cursors_info[i]);
+			}
+		}
+	}
+
+	return NULL;
 }

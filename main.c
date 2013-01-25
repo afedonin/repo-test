@@ -404,6 +404,7 @@ int main(int argc, char **argv)
 			if (kill(pid, 0) == 0)
 			{
 				fprintf(stderr, "pid file found. is another pgpool(%d) is running?\n", pid);
+				pool_shmem_exit(1);
 				exit(1);
 			}
 			else
@@ -416,6 +417,7 @@ int main(int argc, char **argv)
 	else
 	{
 		usage();
+		pool_shmem_exit(1);
 		exit(1);
 	}
 

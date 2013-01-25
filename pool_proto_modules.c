@@ -300,12 +300,36 @@ POOL_STATUS SimpleQuery(POOL_CONNECTION *frontend,
 			bool parallel = true;
 
 			is_parallel_table = is_partition_table(backend,node);
-			status = pool_do_parallel_query(frontend, backend, node, &parallel, &contents, &len);
+			status = pool_do_parallel_query(frontend, backend, query_context, node, &parallel, &contents, &len);
+			if (query_context->is_reflected)
+			{
+				parse_tree_list = raw_parser(contents);
+				if (parse_tree_list == NIL)
+				{
+					parse_tree_list = raw_parser(POOL_DUMMY_WRITE_QUERY);
+				}
+				if (parse_tree_list != NIL)
+				{
+					node = (Node *) lfirst(list_head(parse_tree_list));
+					pool_start_query(query_context, contents, len, node);
+					query_context->is_reflected = true;
+
+					is_parallel_table = is_partition_table(backend,node);
+					status = pool_do_parallel_query(frontend, backend, query_context, node, &parallel, &contents, &len);
+				}
+			}
 			if (parallel)
 			{
 				pool_query_context_destroy(query_context);
 				pool_memory_context_switch_to(old_context);
 				return status;
+			}
+			if (list_length(query_context->move_queries))
+			{
+				POOL_STATUS stats = pool_parallel_exec(frontend, backend, contents, node, true, query_context);
+				pool_query_context_destroy(query_context);
+				pool_memory_context_switch_to(old_context);
+				return stats;
 			}
 		}
 
@@ -513,6 +537,7 @@ POOL_STATUS SimpleQuery(POOL_CONNECTION *frontend,
 	}
 
 	string = query_context->original_query;
+	pool_debug("Executing query: %s", string);
 
 	if (!RAW_MODE)
 	{
@@ -572,6 +597,11 @@ POOL_STATUS SimpleQuery(POOL_CONNECTION *frontend,
 			{
 				/* Send query to all DB nodes at once */
 				status = pool_send_and_wait(query_context, 0, 0);
+
+				if(query_context->cursor_name[0])
+				{
+					pool_session_add_cursor( query_context->cursor_name, query_context->replication_cursor );
+				}
 				/* free_parser(); */
 				return status;
 			}
@@ -636,6 +666,11 @@ POOL_STATUS SimpleQuery(POOL_CONNECTION *frontend,
 			return POOL_END;
 		}
 		/* free_parser(); */
+	}
+
+	if(query_context->cursor_name[0])
+	{
+		pool_session_add_cursor( query_context->cursor_name, query_context->replication_cursor );
 	}
 
 	/* switch memory context */
@@ -2041,6 +2076,15 @@ POOL_STATUS CommandComplete(POOL_CONNECTION *frontend, POOL_CONNECTION_POOL *bac
 	p = pool_read2(MASTER(backend), len);
 	if (p == NULL)
 		return POOL_END;
+
+#ifdef DEBUG
+	int jj = 0;
+	for(; jj < len; jj++)
+	{
+		pool_debug("%c(%d)", p[jj], p[jj]);
+	}
+#endif
+
 	p1 = malloc(len);
 	if (p1 == NULL)
 	{
@@ -2548,7 +2592,11 @@ POOL_STATUS ProcessFrontendResponse(POOL_CONNECTION *frontend,
 	free(contents);
 
 	if (status != POOL_CONTINUE)
+	{
+		pool_session_remove_all_cursors();
+		pool_session_remove_all_cursor_info();
 		status = POOL_ERROR;
+	}
 	return status;
 }
 

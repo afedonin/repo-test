@@ -31,6 +31,7 @@
 #include "parser/nodes.h"
 #include "parser/parsenodes.h"
 #include "parser/pool_memory.h"
+#include "parser/pg_list.h"
 #include "pool_memqcache.h"
 
 /*
@@ -59,6 +60,18 @@ typedef struct {
 	bool where_to_send[MAX_NUM_BACKENDS];	/* DB node map to send query */
 	int  virtual_master_node_id;	   		/* the 1st DB node to send query */
 	POOL_MEMORY_POOL *memory_context;		/* memory context for query */
+	
+	bool is_reflected;   /* is query from System DB ? */
+	bool replication_cursor;
+	bool loadbalance_cursor;
+	char cursor_name[64];
+	List *move_counts_ids;
+	List *move_counts;
+	List *move_queries;
+	bool need_fetch_node_id;
+	bool need_merged_cmd_response;
+	bool is_loadbalance;
+	
 	POOL_QUERY_STATE query_state[MAX_NUM_BACKENDS];	/* for extended query protocol */
 	bool is_cache_safe;	/* true if SELECT is safe to cache */
 	POOL_TEMP_QUERY_CACHE *temp_cache;	/* temporary cache */

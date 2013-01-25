@@ -78,6 +78,9 @@ void pool_query_context_destroy(POOL_QUERY_CONTEXT *query_context)
 		session_context = pool_get_session_context();
 		pool_unset_query_in_progress();
 		session_context->query_context = NULL;
+		list_free(query_context->move_counts);
+		list_free(query_context->move_counts_ids);
+		list_free_deep(query_context->move_queries);
 		pool_memory_delete(query_context->memory_context, 0);
 		free(query_context);
 	}
@@ -102,6 +105,11 @@ void pool_start_query(POOL_QUERY_CONTEXT *query_context, char *query, int len, N
 		query_context->is_cache_safe = false;
 		if (pool_config->memory_cache_enabled)
 			query_context->temp_cache = pool_create_temp_query_cache(query);
+		query_context->is_reflected = false;
+		query_context->replication_cursor = true;
+		query_context->loadbalance_cursor = false;
+		query_context->is_loadbalance = true;
+		memset(query_context->cursor_name, 0, sizeof(query_context->cursor_name));
 		pool_set_query_in_progress();
 		session_context->query_context = query_context;
 	}
@@ -481,7 +489,7 @@ void pool_where_to_send(POOL_QUERY_CONTEXT *query_context, char *query, Node *no
 			 * If a writing function call is used or replicate_select is true,
 			 * we prefer to send to all nodes.
 			 */
-			if (pool_has_function_call(node) || pool_config->replicate_select)
+			if ((pool_has_function_call(node) || pool_config->replicate_select))
 			{
 				pool_setall_node_to_be_sent(query_context);
 			}
@@ -497,6 +505,30 @@ void pool_where_to_send(POOL_QUERY_CONTEXT *query_context, char *query, Node *no
 			{
 				/* only send to master node */
 				pool_set_node_to_be_sent(query_context, REAL_MASTER_NODE_ID);
+			}
+		}
+		else if (IsA(node, DeclareCursorStmt) || IsA(node, ClosePortalStmt) || IsA(node, FetchStmt))
+		{
+			if (query_context->loadbalance_cursor)
+			{
+				if (pool_config->load_balance_mode &&
+						 MAJOR(backend) == PROTO_MAJOR_V3 &&
+					 TSTATE(backend, MASTER_NODE_ID) == 'I')
+				{
+					/* load balance */
+					pool_set_node_to_be_sent(query_context,
+											 session_context->load_balance_node_id);
+				}
+				else
+				{
+					/* only send to master node */
+					pool_set_node_to_be_sent(query_context, REAL_MASTER_NODE_ID);
+				}
+			}
+			else
+			{
+				/* send to all nodes */
+				pool_setall_node_to_be_sent(query_context);
 			}
 		}
 		else

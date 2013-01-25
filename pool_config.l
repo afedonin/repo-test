@@ -154,6 +154,7 @@ int pool_init_config(void)
 	pool_config->child_life_time = 300;
 	pool_config->client_idle_limit = 0;
 	pool_config->connection_life_time = 0;
+	pool_config->child_sleep_before_accept = 0;
 	pool_config->child_max_connections = 0;
 	pool_config->authentication_timeout = 60;
 	pool_config->logdir = DEFAULT_LOGDIR;
@@ -632,6 +633,19 @@ int pool_get_config(char *confpath, POOL_CONFIG_CONTEXT context)
 			}
 			pool_config->connection_life_time = v;
 		}
+        else if (!strcmp(key, "child_sleep_before_accept") &&
+                 CHECK_CONTEXT(INIT_CONFIG|RELOAD_CONFIG, context))
+        {
+            int v = atoi(yytext);
+
+            if (token != POOL_INTEGER || v < 0)
+            {
+                pool_error("pool_config: %s must be greater or equal to 0 numeric value", key);
+                fclose(fd);
+                return(-1);
+            }
+            pool_config->child_sleep_before_accept = v;
+        }
 		else if (!strcmp(key, "child_max_connections") &&
 				 CHECK_CONTEXT(INIT_CONFIG|RELOAD_CONFIG, context))
 		{

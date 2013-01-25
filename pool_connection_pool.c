@@ -403,6 +403,25 @@ void pool_backend_timer(void)
 				memset(p, 0, sizeof(POOL_CONNECTION_POOL));
 				p->info = info;
 				memset(p->info, 0, sizeof(ConnectionInfo) * MAX_NUM_BACKENDS);
+
+				/* prepare to shutdown connections to system db */
+				if(pool_config->child_sleep_before_accept && (pool_config->parallel_mode || pool_config->enable_query_cache))
+				{
+					if (system_db_info->pgconn)
+						pool_close_libpq_connection();
+					if (pool_system_db_connection() && pool_system_db_connection()->con)
+					{
+						pool_send_frontend_exit(pool_system_db_connection()->con);
+						pool_close(pool_system_db_connection()->con);
+					}
+
+					if( system_db_info->connection )
+					{
+						free( system_db_info->connection );
+						memset(system_db_info->connection, 0, sizeof(POOL_CONNECTION_POOL_SLOT));
+						system_db_info->connection = NULL;
+					}
+				}
 			}
 			else
 			{

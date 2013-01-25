@@ -486,6 +486,7 @@ extern void pool_set_timeout(int timeoutval);
 extern int pool_check_fd(POOL_CONNECTION *cp);
 
 extern void pool_send_frontend_exits(POOL_CONNECTION_POOL *backend);
+extern void pool_send_frontend_exit(POOL_CONNECTION *backend);
 
 extern int pool_read_message_length(POOL_CONNECTION_POOL *cp);
 extern int *pool_read_message_length2(POOL_CONNECTION_POOL *cp);
@@ -544,7 +545,7 @@ extern int pool_get_node_count(void);
 extern int *pool_get_process_list(int *array_size);
 extern ProcessInfo *pool_get_process_info(pid_t pid);
 extern SystemDBInfo *pool_get_system_db_info(void);
-extern POOL_STATUS OneNode_do_command(POOL_CONNECTION *frontend, POOL_CONNECTION *backend, char *query, char *database);
+extern POOL_STATUS OneNode_do_command(POOL_CONNECTION *frontend, POOL_CONNECTION *backend, char *query, char *database, bool send_to_frontend, bool fix_response, void **node_ids);
 
 /* child.c */
 extern POOL_CONNECTION_POOL_SLOT *make_persistent_db_connection(

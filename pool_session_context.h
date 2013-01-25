@@ -32,6 +32,7 @@
 #include "pool_session_context.h"
 #include "pool_query_context.h"
 #include "parser/pool_memory.h"
+#include "parser/pool_string.h"
 #include "pool_memqcache.h"
 
 /*
@@ -73,6 +74,23 @@ typedef struct {
 	int size;		/* number of elements */
 	POOL_SENT_MESSAGE **sent_messages;
 } POOL_SENT_MESSAGE_LIST;
+
+/*
+ * opened cursors
+ */
+#define POOL_SESSION_MAX_OPENED_CURSORS 32
+#define POOL_SESSION_MAX_CURSOR_NAME    64
+
+typedef struct {
+	char *cursor_name;
+	char *footer_info;
+	bool table_type;
+} CursorsInfo;
+
+typedef struct {
+	char replication_cursors[POOL_SESSION_MAX_OPENED_CURSORS][POOL_SESSION_MAX_CURSOR_NAME]; /*opened cursors name's on replication tables*/
+	char distributed_cursors[POOL_SESSION_MAX_OPENED_CURSORS][POOL_SESSION_MAX_CURSOR_NAME]; /*opened cursors name's on distributed tables*/
+} POOL_SESSION_OPENED_CURSORS;
 
 /*
  * Per session context:
@@ -121,6 +139,11 @@ typedef struct {
 	/* where to send map for PREPARE/EXECUTE/DEALLOCATE */
 	POOL_PREPARED_SEND_MAP prep_where;
 #endif /* NOT_USED */
+	
+	/* opened cursors in current session */
+	POOL_SESSION_OPENED_CURSORS opened_cursors;
+	CursorsInfo cursors_info[POOL_SESSION_MAX_OPENED_CURSORS];
+	
 	POOL_MEMORY_POOL *memory_context;	/* memory context for session */
 
 	/* message which does'nt receive complete message */
@@ -142,6 +165,8 @@ typedef struct {
 	 * -1 for down nodes.
 	 */
 	int ntuples[MAX_NUM_BACKENDS];
+
+	bool in_transaction;
 
 	/*
 	 * If true, we are executing reset query list.
@@ -194,6 +219,16 @@ extern void pool_set_command_success(void);
 extern bool pool_is_command_success(void);
 extern void pool_copy_prep_where(bool *src, bool *dest);
 extern bool can_query_context_destroy(POOL_QUERY_CONTEXT *qc);
+
+extern void pool_session_add_cursor(const char *name, bool replication_type);
+extern void pool_session_remove_cursor(const char *name, bool replication_type);
+extern void pool_session_remove_all_cursors();
+extern int  pool_session_find_cursor(const char *name);
+
+extern void pool_session_add_cursor_info(const char *name, const char *footer, bool replication_type);
+extern void pool_session_remove_cursor_info(const char *name);
+extern void pool_session_remove_all_cursor_info();
+extern CursorsInfo* pool_session_get_cursor_info(const char *name);
 
 #ifdef NOT_USED
 extern void pool_add_prep_where(char *name, bool *map);

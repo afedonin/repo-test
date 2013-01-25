@@ -148,7 +148,15 @@ void do_child(int unix_fd, int inet_fd)
 #endif
 
 	/* initialize system db connection */
-	init_system_db_connection();
+	if( pool_config->child_sleep_before_accept == 0 )
+	{
+		init_system_db_connection();
+	}
+	else
+	{
+		system_db_info->pgconn = NULL;
+		system_db_info->connection = NULL;
+	}
 
 	/* initialize connection pool */
 	if (pool_init_cp())
@@ -292,6 +300,15 @@ void do_child(int unix_fd, int inet_fd)
 			pool_get_my_process_info()->need_to_restart = 0;
 			close_idle_connection(0);
 			pool_initialize_private_backend_status();
+		}
+
+		if(pool_config->child_sleep_before_accept && (pool_config->parallel_mode || pool_config->enable_query_cache))
+		{
+			if (system_db_info->pgconn == NULL && pool_system_db_connection() == NULL)
+			{
+				/* initialize system db connection */
+				init_system_db_connection();
+			}
 		}
 
 		/*
@@ -608,6 +625,16 @@ static POOL_CONNECTION *do_accept(int unix_fd, int inet_fd, struct timeval *time
 	while (*InRecovery == 1)
 	{
 		pause();
+	}
+
+	/* If child hasn't PostgreSQL connections, it sleep for microseconds before accepting new client connection. */
+	if( pool_config->child_sleep_before_accept )
+	{
+		POOL_CONNECTION_POOL *p = pool_connection_pool;
+		if (MASTER_CONNECTION(p) == NULL || MASTER_CONNECTION(p)->sp == NULL)
+		{
+			usleep( pool_config->child_sleep_before_accept );
+		}
 	}
 
 	afd = accept(fd, (struct sockaddr *)&saddr.addr, &saddr.salen);
@@ -1412,8 +1439,18 @@ void child_exit(int code)
 	{
 		if (system_db_info->pgconn)
 			pool_close_libpq_connection();
-		if (pool_system_db_connection())
+		if (pool_system_db_connection() && pool_system_db_connection()->con)
+		{
+			pool_send_frontend_exit(pool_system_db_connection()->con);
 			pool_close(pool_system_db_connection()->con);
+		}
+
+		if( system_db_info->connection )
+		{
+			free( system_db_info->connection );
+			memset(system_db_info->connection, 0, sizeof(POOL_CONNECTION_POOL_SLOT));
+			system_db_info->connection = NULL;
+		}
 	}
 
 	if (pool_config->memory_cache_enabled && !pool_is_shmem_cache())

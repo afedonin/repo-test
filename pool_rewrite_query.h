@@ -31,6 +31,7 @@
 #include "parser/parsenodes.h"
 #include "parser/pool_memory.h"
 #include "parser/pool_string.h"
+#include "pool_query_context.h"
 
 /* return code set */
 #define INSERT_SQL_RESTRICTION 1 
@@ -82,6 +83,10 @@ typedef struct {
 	int *column_no;      /* order of column */
 	int *valid;          /* valid column is true */
 	int col_num;         /* virtual table column num */
+	char **subquery;      /* target-subqueries list */
+	char **subquery_type; /* target-subqueries return types */
+	int subquery_num; /* number of target-subqueries */
+	int current_subquery;
 } VirtualTable;
 
 /* this struct is used by JOIN Expr */
@@ -111,6 +116,9 @@ typedef struct {
 	int s_num;  /* sort funcs num */
 	int sc_num; /* sort column num */
 	bool opt;   /* optimization flag */
+
+	int group_const;
+	char *real_group;
 } Aggexpr;
 
 /* main struct of alanyzing query */
@@ -157,6 +165,16 @@ typedef struct {
 	bool is_loadbalance; /* load ballance ? */
 	bool is_parallel;    /* can paralle exec ? */
 	bool fromClause;     /* having FromCluase ? */
+
+	bool is_reflected;   /* is query from System DB ? */
+	bool is_target_select;  /* is current select a target ? */
+	bool special_info;
+	bool is_cursor_move;
+	bool in_quote_block;
+	bool in_union;
+	int strange_nodes[10];
+	int strange_nodes_num;
+
 	char *table_relname; /* table name */
 	char *table_alias;   /* table alias name */
 	char *schemaname;    /* schema */
@@ -177,15 +195,20 @@ typedef struct {
 	char *password;  /* passward of connection */
 } ConInfoTodblink;
 
-extern RewriteQuery *rewrite_query_stmt(Node *node, POOL_CONNECTION *frontend,POOL_CONNECTION_POOL *backend,RewriteQuery *message);
+extern RewriteQuery *rewrite_query_stmt(Node *node, POOL_CONNECTION *frontend, POOL_CONNECTION_POOL *backend, RewriteQuery *message, POOL_QUERY_CONTEXT *query_context);
 extern void nodeToRewriteString(RewriteQuery *message, ConInfoTodblink *dblink,void *obj);
+extern void extractRepCursorInfo(RewriteQuery *message, ConInfoTodblink *dblink, void *obj, String *str);
+extern void extractDistCursorInfo(RewriteQuery *message, ConInfoTodblink *dblink, void *obj, String *str);
 char *pool_error_message(char *message);
 extern int IsSelectpgcatalog(Node *node,POOL_CONNECTION_POOL *backend);
-extern RewriteQuery *is_parallel_query(Node *node,POOL_CONNECTION_POOL *backend);
-extern POOL_STATUS pool_parallel_exec(POOL_CONNECTION *frontend,POOL_CONNECTION_POOL *backend, char *string,Node *node,bool send_to_frontend);
+extern RewriteQuery *is_parallel_query(Node *node,POOL_CONNECTION_POOL *backend, POOL_QUERY_CONTEXT *query_context);
+extern POOL_STATUS pool_parallel_exec(POOL_CONNECTION *frontend,POOL_CONNECTION_POOL *backend, char *string,Node *node,bool send_to_frontend, POOL_QUERY_CONTEXT *query_context);
+
+extern void writeTransactionQuery(String *str, ConInfoTodblink *dblink, bool connect);
 
 POOL_STATUS pool_do_parallel_query(POOL_CONNECTION *frontend,
 								   POOL_CONNECTION_POOL *backend,
+								   POOL_QUERY_CONTEXT *query_context,
 								   Node *node, bool *parallel, char **string, int *len);
 
 #endif	/* POOL_REWRITE_QUERY_H */

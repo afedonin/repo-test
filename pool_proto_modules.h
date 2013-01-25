@@ -40,6 +40,8 @@
 #define POOL_DUMMY_READ_QUERY "SELECT 'pgpool: unable to parse the query'"
 #define POOL_ERROR_QUERY "send invalid query from pgpool to abort transaction"
 
+#define NODE_ID_COLUMN_NAME "pgpool_node_id"
+
 extern char *copy_table;  /* copy table name */
 extern char *copy_schema;  /* copy table name */
 extern char copy_delimiter; /* copy delimiter char */
@@ -151,6 +153,7 @@ extern int RowDescription(POOL_CONNECTION *frontend,
 
 extern POOL_STATUS wait_for_query_response(POOL_CONNECTION *frontend, POOL_CONNECTION *backend, int protoVersion);
 extern int is_select_query(Node *node, char *sql);
+//extern bool is_sequence_query(Node *node);
 extern bool is_commit_query(Node *node);
 extern bool is_rollback_query(Node *node);
 extern bool is_commit_or_rollback_query(Node *node);
