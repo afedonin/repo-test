@@ -405,7 +405,7 @@ void pool_backend_timer(void)
 				memset(p->info, 0, sizeof(ConnectionInfo) * MAX_NUM_BACKENDS);
 
 				/* prepare to shutdown connections to system db */
-				if(pool_config->child_sleep_before_accept && (pool_config->parallel_mode || pool_config->enable_query_cache))
+				if(pool_config->system_db_dynamic_connection && (pool_config->parallel_mode || pool_config->enable_query_cache))
 				{
 					if (system_db_info->pgconn)
 						pool_close_libpq_connection();

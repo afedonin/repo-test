@@ -111,9 +111,10 @@ max_pool = 4
 
 # - Life time -
 
-# If child with no PostgreSQL connections, it sleep for this many microseconds before accepting new client connection.
+# >0 - child connects to System DB when it's really needed.
+# Also, its number of mcs child sleep before accept new client if it hasn't System DB connections. 
 # 0 means no dynamic connections.
-child_sleep_before_accept = 0
+system_db_dynamic_connection = 0
 
 child_life_time = 300
                                    # Pool exits after being idle for this many seconds

@@ -71,7 +71,7 @@ typedef struct {
     int	num_init_children;	/* # of children initially pre-forked */
     int	child_life_time;	/* if idle for this seconds, child exits */
     int	connection_life_time;	/* if idle for this seconds, connection closes */
-    int	child_sleep_before_accept; /* if 0 - pgpool connections are static, >0 - (in mcs) child without PostgreSQL connections sleep before accept*/
+    int	system_db_dynamic_connection; /* if 0 - pgpool connections to System DB are static, >0 - connections are dynamic; (in mcs) child without PostgreSQL connections sleep before accept*/
     int	child_max_connections;	/* if max_connections received, child exits */
 	int client_idle_limit;		/* If client_idle_limit is n (n > 0), the client is forced to be
 								   disconnected after n seconds idle */

@@ -148,7 +148,7 @@ void do_child(int unix_fd, int inet_fd)
 #endif
 
 	/* initialize system db connection */
-	if( pool_config->child_sleep_before_accept == 0 )
+	if( pool_config->system_db_dynamic_connection == 0 )
 	{
 		init_system_db_connection();
 	}
@@ -302,7 +302,7 @@ void do_child(int unix_fd, int inet_fd)
 			pool_initialize_private_backend_status();
 		}
 
-		if(pool_config->child_sleep_before_accept && (pool_config->parallel_mode || pool_config->enable_query_cache))
+		if(pool_config->system_db_dynamic_connection && (pool_config->parallel_mode || pool_config->enable_query_cache))
 		{
 			if (system_db_info->pgconn == NULL && pool_system_db_connection() == NULL)
 			{
@@ -628,12 +628,12 @@ static POOL_CONNECTION *do_accept(int unix_fd, int inet_fd, struct timeval *time
 	}
 
 	/* If child hasn't PostgreSQL connections, it sleep for microseconds before accepting new client connection. */
-	if( pool_config->child_sleep_before_accept )
+	if( pool_config->system_db_dynamic_connection )
 	{
 		POOL_CONNECTION_POOL *p = pool_connection_pool;
 		if (MASTER_CONNECTION(p) == NULL || MASTER_CONNECTION(p)->sp == NULL)
 		{
-			usleep( pool_config->child_sleep_before_accept );
+			usleep( pool_config->system_db_dynamic_connection );
 		}
 	}
 

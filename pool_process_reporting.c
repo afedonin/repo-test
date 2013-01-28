@@ -248,9 +248,9 @@ POOL_REPORT_CONFIG* get_config(int *nrows)
 	strncpy(status[i].desc, "if idle for this seconds, connection closes", POOLCONFIG_MAXDESCLEN);
 	i++;
 
-	strncpy(status[i].name, "child_sleep_before_accept", POOLCONFIG_MAXNAMELEN);
-	snprintf(status[i].value, POOLCONFIG_MAXVALLEN, "%d", pool_config->child_sleep_before_accept);
-	strncpy(status[i].desc, "if child with no PostgreSQL connections, it sleep for this many microseconds before accepting new client connection", POOLCONFIG_MAXDESCLEN);
+	strncpy(status[i].name, "system_db_dynamic_connection", POOLCONFIG_MAXNAMELEN);
+	snprintf(status[i].value, POOLCONFIG_MAXVALLEN, "%d", pool_config->system_db_dynamic_connection);
+	strncpy(status[i].desc, "If system_db_dynamic_connection > 0, connections to System DB are dynamic", POOLCONFIG_MAXDESCLEN);
 	i++;
 
 	strncpy(status[i].name, "client_idle_limit", POOLCONFIG_MAXNAMELEN);
